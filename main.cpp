@@ -8,55 +8,50 @@
 using namespace clang;
 using namespace clang::ast_matchers;
 
+std::map<std::string, const clang::CXXRecordDecl*> discoveredClasses;
+
+std::string getClassName(const clang::CXXRecordDecl* c) {
+    auto ctx = c->getDeclContext();
+
+    SmallVector<const DeclContext*, 8> contexts;
+
+    while (ctx) {
+        if(ctx->isStdNamespace()) {
+            break;
+        }
+        if (isa<NamedDecl>(ctx))
+            contexts.push_back(ctx);
+        ctx = ctx->getParent();
+    }
+
+    std::string className;
+
+    for (const DeclContext *DC : llvm::reverse(contexts)) {
+        if (const auto* ND = dyn_cast<NamespaceDecl>(DC)) {
+            className += ND->getNameAsString() + "::";
+        }
+    }
+
+    className += c->getNameAsString();
+
+    return className;
+}
+
 class LoopPrinter : public MatchFinder::MatchCallback {
     public :
         void run(const MatchFinder::MatchResult& result) override {
             if (auto* fs = result.Nodes.getNodeAs<clang::CXXRecordDecl>("lcClasses")) {
-                auto ctx = fs->getDeclContext();
-
-                SmallVector<const DeclContext*, 8> contexts;
-
-                bool isLCClass = false;
-
-                while (ctx) {
-                    if(ctx->isStdNamespace()) {
-                        break;
-                    }
-                    if (isa<NamedDecl>(ctx))
-                        contexts.push_back(ctx);
-                    ctx = ctx->getParent();
-                }
-
-                for (const DeclContext* DC : llvm::reverse(contexts)) {
-                    if (const auto* ND = dyn_cast<NamespaceDecl>(DC)) {
-                        if(ND->getNameAsString() == "lc") {
-                            isLCClass = true;
-                            break;
-                        }
-                    }
-                }
-
-                if(!isLCClass) {
+                if(!fs->hasDefinition()) {
                     return;
                 }
 
-                for (const DeclContext *DC : llvm::reverse(contexts)) {
-                    if (const auto* ND = dyn_cast<NamespaceDecl>(DC)) {
-                        std::cout << ND->getNameAsString() << std::endl;
-                    }
+                std::string className = getClassName(fs);
+
+                if(className.find("lc::") == -1) {
+                    return;
                 }
 
-
-                std::cout << "Class: " << fs->getNameAsString() << std::endl;
-
-
-                if(fs->hasDefinition()) {
-                    auto bases = fs->bases();
-
-                    for (auto base : bases) {
-                        std::cout << "- Base: " << base.getType().getAsString() << std::endl;
-                    }
-                }
+                discoveredClasses[className] = fs;
             }
         }
 };
@@ -71,5 +66,17 @@ int main(int argc, const char** argv) {
     MatchFinder finder;
     finder.addMatcher(cxxRecordDecl(isClass()).bind("lcClasses"), &printer);
 
-    return tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+    tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+
+    for(const auto& c : discoveredClasses) {
+        std::cout << c.first << std::endl;
+
+        for (auto base : c.second->bases()) {
+            if(base.getType()->getAsCXXRecordDecl()) {
+                std::cout << "- Base: " << getClassName(base.getType()->getAsCXXRecordDecl()) << std::endl;
+            }
+        }
+    }
+
+    return 0;
 }
