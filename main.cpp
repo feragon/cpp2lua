@@ -37,7 +37,7 @@ std::string getClassName(const clang::CXXRecordDecl* c) {
     return className;
 }
 
-class LoopPrinter : public MatchFinder::MatchCallback {
+class ClassParser : public MatchFinder::MatchCallback {
     public :
         void run(const MatchFinder::MatchResult& result) override {
             if (auto* fs = result.Nodes.getNodeAs<clang::CXXRecordDecl>("lcClasses")) {
@@ -62,20 +62,62 @@ int main(int argc, const char** argv) {
     clang::tooling::ClangTool tool(op.getCompilations(), op.getSourcePathList());
 
 
-    LoopPrinter printer;
+    ClassParser parser;
     MatchFinder finder;
-    finder.addMatcher(cxxRecordDecl(isClass()).bind("lcClasses"), &printer);
+    finder.addMatcher(cxxRecordDecl(isClass()).bind("lcClasses"), &parser);
 
     tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
 
-    for(const auto& c : discoveredClasses) {
-        std::cout << c.first << std::endl;
 
-        for (auto base : c.second->bases()) {
-            if(base.getType()->getAsCXXRecordDecl()) {
-                std::cout << "- Base: " << getClassName(base.getType()->getAsCXXRecordDecl()) << std::endl;
+    std::cout << "kaguya::State state;" << std::endl;
+    for(auto c : discoveredClasses) {
+        std::string className = c.first;
+
+        std::string::size_type n = 0;
+        while (( n = className.find("::", n )) != std::string::npos) {
+            className.replace(n, 2, ".");
+            n += 1;
+        }
+
+        std::cout << "state[\"" << className << "\"].setClass(kaguya::UserdataMetatable<";
+
+        std::vector<clang::CXXRecordDecl*> bases;
+
+        for(auto base : c.second->bases()) {
+            auto cxxRecordBase = base.getType()->getAsCXXRecordDecl();
+            if(cxxRecordBase) {
+                bases.push_back(cxxRecordBase);
             }
         }
+
+        switch(bases.size()) {
+            case 0:
+                std::cout << c.first;
+                break;
+
+            case 1:
+                std::cout << getClassName(*(bases.begin())) << ", " << c.first;
+                break;
+
+            default:
+                std::cout << "MultipleInheritance, kaguya::MultipleBase<";
+                auto it = bases.begin();
+                std::cout << getClassName(*it);
+                it++;
+                while(it != bases.end()) {
+                    std::cout << ", " << getClassName(*it);
+                    it++;
+                }
+                for(auto base : bases) {
+
+                }
+                std::cout << ">";
+                break;
+        }
+        std::cout << ">()" << std::endl;
+
+        std::cout << ");" << std::endl;
+        std::cout << std::endl;
     }
 
     return 0;
