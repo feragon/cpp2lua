@@ -56,6 +56,27 @@ class ClassParser : public MatchFinder::MatchCallback {
         }
 };
 
+void printMethods(const clang::CXXRecordDecl* c) {
+    for(CXXMethodDecl* method : c->methods()) {
+        //Operator
+        if(method->isOverloadedOperator()) {
+            continue;
+        }
+
+        //Destructor
+        if(method->getNameAsString()[0] == '~') {
+            continue;
+        }
+
+        //Constructor
+        if(method->getNameAsString() == c->getNameAsString()) {
+            continue;
+        }
+
+        std::cout << "    .addFunction(\"" << method->getNameAsString() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+    }
+}
+
 int main(int argc, const char** argv) {
     llvm::cl::OptionCategory category("cpp2lua");
     clang::tooling::CommonOptionsParser op(argc, argv, category);
@@ -115,6 +136,8 @@ int main(int argc, const char** argv) {
                 break;
         }
         std::cout << ">()" << std::endl;
+
+        printMethods(c.second);
 
         std::cout << ");" << std::endl;
         std::cout << std::endl;
