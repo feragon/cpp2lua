@@ -57,23 +57,54 @@ class ClassParser : public MatchFinder::MatchCallback {
 };
 
 void printMethods(const clang::CXXRecordDecl* c) {
+    std::vector<CXXMethodDecl*> constructors;
+
     for(CXXMethodDecl* method : c->methods()) {
+        //Private or protected methods
+        if(method->getAccess() != AS_public) {
+            continue;
+        }
+
+        if(!method->getDeclName().isIdentifier() || method->getName().begin()[0] == '\0') {
+            continue;
+        }
+
         //Operator
         if(method->isOverloadedOperator()) {
             continue;
         }
 
         //Destructor
-        if(method->getNameAsString()[0] == '~') {
+        if(method->getName().begin()[0] == '~') {
             continue;
         }
 
         //Constructor
-        if(method->getNameAsString() == c->getNameAsString()) {
+        if(method->getDeclName() == c->getDeclName()) {
+            constructors.push_back(method);
             continue;
         }
 
-        std::cout << "    .addFunction(\"" << method->getNameAsString() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+        std::cout << "    .addFunction(\"" << method->getName().begin() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+    }
+
+    if(!constructors.empty()) {
+        std::cout << "    .setConstructors<";
+
+        auto it = constructors.begin();
+
+        while(it != constructors.end()) {
+            std::cout << (*it)->getNameAsString() << "(";
+            //TODO: parameters
+            std::cout << ")";
+            it++;
+
+            if(it != constructors.end()) {
+                std::cout << ", ";
+            }
+        }
+
+        std::cout << ">()" << std::endl;
     }
 }
 
@@ -122,15 +153,14 @@ int main(int argc, const char** argv) {
 
             default:
                 std::cout << "MultipleInheritance, kaguya::MultipleBase<";
+
                 auto it = bases.begin();
                 std::cout << getClassName(*it);
                 it++;
+
                 while(it != bases.end()) {
                     std::cout << ", " << getClassName(*it);
                     it++;
-                }
-                for(auto base : bases) {
-
                 }
                 std::cout << ">";
                 break;
