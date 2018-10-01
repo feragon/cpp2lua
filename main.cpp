@@ -4,6 +4,7 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include <iostream>
+#include <sstream>
 
 using namespace clang;
 using namespace clang::ast_matchers;
@@ -56,6 +57,32 @@ class ClassParser : public MatchFinder::MatchCallback {
         }
 };
 
+std::vector<std::string> toRemoveParameters = {
+        "class ", "std::"
+};
+
+void printParameters(const clang::CXXMethodDecl* method) {
+    auto parameters = method->parameters();
+    auto parameter = parameters.begin();
+    while(parameter != parameters.end()) {
+        std::string type = (*parameter)->getType().getAsString();
+
+        for(const auto& toRemoveParameter : toRemoveParameters) {
+            size_t pos;
+            if((pos = type.find(toRemoveParameter, 0)) != std::string::npos) {
+                type.erase(pos, toRemoveParameter.size());
+            }
+        }
+
+        std::cout << type;
+
+        parameter++;
+        if(parameter != parameters.end()) {
+            std::cout << ", ";
+        }
+    }
+}
+
 void printMethods(const clang::CXXRecordDecl* c) {
     std::vector<CXXMethodDecl*> constructors;
 
@@ -65,27 +92,23 @@ void printMethods(const clang::CXXRecordDecl* c) {
             continue;
         }
 
-        if(!method->getDeclName().isIdentifier() || method->getName().begin()[0] == '\0') {
-            continue;
-        }
-
         //Operator
         if(method->isOverloadedOperator()) {
             continue;
         }
 
         //Destructor
-        if(method->getName().begin()[0] == '~') {
+        if(method->getNameAsString()[0] == '~') {
             continue;
         }
 
         //Constructor
-        if(method->getDeclName() == c->getDeclName()) {
+        if(method->getNameAsString() == c->getNameAsString()) {
             constructors.push_back(method);
             continue;
         }
 
-        std::cout << "    .addFunction(\"" << method->getName().begin() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+        std::cout << "    .addFunction(\"" << method->getNameAsString() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
     }
 
     if(!constructors.empty()) {
@@ -95,7 +118,10 @@ void printMethods(const clang::CXXRecordDecl* c) {
 
         while(it != constructors.end()) {
             std::cout << (*it)->getNameAsString() << "(";
-            //TODO: parameters
+
+            printParameters(*it);
+
+
             std::cout << ")";
             it++;
 
