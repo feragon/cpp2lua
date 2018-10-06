@@ -85,6 +85,7 @@ void printParameters(const clang::CXXMethodDecl* method) {
 
 void printMethods(const clang::CXXRecordDecl* c) {
     std::vector<CXXMethodDecl*> constructors;
+    std::map<std::string, std::vector<CXXMethodDecl*>> methods;
 
     for(CXXMethodDecl* method : c->methods()) {
         //Private or protected methods
@@ -108,7 +109,7 @@ void printMethods(const clang::CXXRecordDecl* c) {
             continue;
         }
 
-        std::cout << "    .addFunction(\"" << method->getNameAsString() << "\", &" << method->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+        methods[method->getNameAsString()].push_back(method);
     }
 
     if(!constructors.empty()) {
@@ -131,6 +132,15 @@ void printMethods(const clang::CXXRecordDecl* c) {
         }
 
         std::cout << ">()" << std::endl;
+    }
+
+    for(auto method : methods) {
+        if(method.second.size() > 1) {
+            std::cout << "//  .addOverloadedFunctions(\"" << method.first << "\")" << std::endl;
+        }
+        else {
+            std::cout << "    .addFunction(\"" << method.first << "\", &" << (*method.second.begin())->getQualifiedNameAsString().substr(5) << ")" << std::endl;
+        }
     }
 }
 
