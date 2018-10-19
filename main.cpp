@@ -99,7 +99,7 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
             methodName = methodName.substr(0, index);
         }
         if(methodName == c->getNameAsString()) {
-            if(!method->isImplicit()) {
+            if(!method->isImplicit() && !c->isAbstract()) {
                 constructors.push_back(method);
             }
             continue;
@@ -162,7 +162,7 @@ class ClassParser : public MatchFinder::MatchCallback {
     public :
         void run(const MatchFinder::MatchResult& result) override {
             if (auto* fs = result.Nodes.getNodeAs<clang::CXXRecordDecl>("lcClasses")) {
-                if(!fs->hasDefinition()) {
+                if(!fs->isCompleteDefinition()) {
                     return;
                 }
 
@@ -198,7 +198,7 @@ class ClassParser : public MatchFinder::MatchCallback {
 
                 for(auto base : fs->bases()) {
                     auto cxxRecordBase = base.getType()->getAsCXXRecordDecl();
-                    if(cxxRecordBase) {
+                    if(cxxRecordBase && getClassName(cxxRecordBase) != "enable_shared_from_this") {
                         bases.push_back(cxxRecordBase);
                     }
                 }
@@ -213,7 +213,7 @@ class ClassParser : public MatchFinder::MatchCallback {
                         break;
 
                     default:
-                        oss << "kaguya::MultipleInheritance, kaguya::MultipleBase<";
+                        oss << className << ", kaguya::MultipleBase<";
 
                         auto it = bases.begin();
                         oss << getClassName(*it);
