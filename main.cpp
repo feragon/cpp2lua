@@ -209,7 +209,7 @@ class ClassParser : public MatchFinder::MatchCallback {
                         break;
 
                     case 1:
-                        oss << getClassName(*(bases.begin())) << ", " << className;
+                        oss << className << ", " << getClassName(*(bases.begin()));
                         break;
 
                     default:
