@@ -17,9 +17,6 @@ std::string getClassName(const clang::CXXRecordDecl* c) {
     SmallVector<const DeclContext*, 8> contexts;
 
     while (ctx) {
-        if(ctx->isStdNamespace()) {
-            break;
-        }
         if (isa<NamedDecl>(ctx))
             contexts.push_back(ctx);
         ctx = ctx->getParent();
@@ -39,7 +36,7 @@ std::string getClassName(const clang::CXXRecordDecl* c) {
 }
 
 std::vector<std::string> toRemoveParameters = {
-        "class "
+        "class ", "struct "
 };
 
 void printParameters(const clang::CXXMethodDecl* method, std::ostream& o) {
@@ -150,11 +147,24 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
                 o << ") &" << overload->getQualifiedNameAsString();
             }
 
-            o << ")" << std::endl;
+            o << ")";
         }
         else {
-            o << "    .addFunction(\"" << method.first << "\", &" << (*method.second.begin())->getQualifiedNameAsString() << ")" << std::endl;
+            o << "    .addFunction(\"" << method.first << "\", &" << (*method.second.begin())->getQualifiedNameAsString() << ")";
         }
+
+        bool hasTemplate = false;
+        for(auto m : method.second) {
+            if(method) {
+                hasTemplate = true;
+            }
+        }
+
+        if(hasTemplate) {
+            o << " //TODO: templated";
+        }
+
+        o << std::endl;
     }
 }
 
@@ -198,7 +208,7 @@ class ClassParser : public MatchFinder::MatchCallback {
 
                 for(auto base : fs->bases()) {
                     auto cxxRecordBase = base.getType()->getAsCXXRecordDecl();
-                    if(cxxRecordBase && getClassName(cxxRecordBase) != "enable_shared_from_this") {
+                    if(cxxRecordBase && getClassName(cxxRecordBase).substr(0, 5) != "std::") {
                         bases.push_back(cxxRecordBase);
                     }
                 }
