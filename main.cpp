@@ -129,7 +129,7 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
 
     for(auto method : methods) {
         if(method.second.size() > 1) {
-            o << "    .addOverloadedFunctions(\"" << method.first << "\", ";
+            o << "  //.addOverloadedFunctions(\"" << method.first << "\", ";
 
             bool first = true;
             for(auto overload : method.second) {
@@ -150,18 +150,12 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
             o << ")";
         }
         else {
-            o << "    .addFunction(\"" << method.first << "\", &" << (*method.second.begin())->getQualifiedNameAsString() << ")";
-        }
-
-        bool hasTemplate = false;
-        for(auto m : method.second) {
-            if(method) {
-                hasTemplate = true;
+            o << "    .add";
+            if((*method.second.begin())->isStatic()) {
+                o << "Static";
             }
-        }
 
-        if(hasTemplate) {
-            o << " //TODO: templated";
+            o << "Function(\"" << method.first << "\", &" << (*method.second.begin())->getQualifiedNameAsString() << ")";
         }
 
         o << std::endl;
