@@ -39,24 +39,27 @@ std::vector<std::string> toRemoveParameters = {
         "class ", "struct "
 };
 
+std::string getType(QualType qualType) {
+    std::string type = qualType.getAsString();
+
+    for(const auto& toRemoveParameter : toRemoveParameters) {
+        size_t pos;
+        if((pos = type.find(toRemoveParameter, 0)) != std::string::npos) {
+            type.erase(pos, toRemoveParameter.size());
+        }
+    }
+
+    if(type == "_Bool") {
+        type = "bool";
+    }
+    return type;
+}
+
 void printParameters(const clang::CXXMethodDecl* method, std::ostream& o) {
     auto parameters = method->parameters();
     auto parameter = parameters.begin();
     while(parameter != parameters.end()) {
-        std::string type = (*parameter)->getType().getAsString();
-
-        for(const auto& toRemoveParameter : toRemoveParameters) {
-            size_t pos;
-            if((pos = type.find(toRemoveParameter, 0)) != std::string::npos) {
-                type.erase(pos, toRemoveParameter.size());
-            }
-        }
-
-        if(type == "_Bool") {
-            type = "bool";
-        }
-
-        o << type;
+        o << getType((*parameter)->getType());
 
         parameter++;
         if(parameter != parameters.end()) {
@@ -96,7 +99,9 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
             methodName = methodName.substr(0, index);
         }
         if(methodName == c->getNameAsString()) {
-            if(!method->isImplicit() && !c->isAbstract()) {
+            method->dump();
+            std::cout << ((CXXConstructorDecl*)c)->isMoveAssignmentOperator() << std::endl;
+            if(!method->isImplicit() && !c->isAbstract() && !((CXXConstructorDecl*)c)->isMoveConstructor()) {
                 constructors.push_back(method);
             }
             continue;
@@ -129,7 +134,7 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
 
     for(auto method : methods) {
         if(method.second.size() > 1) {
-            o << "  //.addOverloadedFunctions(\"" << method.first << "\", ";
+            o << "    .addOverloadedFunctions(\"" << method.first << "\", ";
 
             bool first = true;
             for(auto overload : method.second) {
@@ -140,11 +145,11 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
                     o << ", ";
                 }
 
-                o << "(" << getClassName(c) << "::*)(";
+                o << "static_cast<" << getType(overload->getReturnType()) << "(" << getClassName(c) << "::*)(";
 
                 printParameters(overload, o);
 
-                o << ") &" << overload->getQualifiedNameAsString();
+                o << ")>(&" << overload->getQualifiedNameAsString();
             }
 
             o << ")";
