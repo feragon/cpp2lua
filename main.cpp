@@ -99,8 +99,6 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
             methodName = methodName.substr(0, index);
         }
         if(methodName == c->getNameAsString()) {
-            method->dump();
-            std::cout << ((CXXConstructorDecl*)c)->isMoveAssignmentOperator() << std::endl;
             if(!method->isImplicit() && !c->isAbstract() && !((CXXConstructorDecl*)c)->isMoveConstructor()) {
                 constructors.push_back(method);
             }
