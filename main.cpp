@@ -147,7 +147,13 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
 
                 printParameters(overload, o);
 
-                o << ")>(&" << overload->getQualifiedNameAsString();
+                o << ")";
+
+                if(overload->isConst()) {
+                    o << " const";
+                }
+
+                o << ">(&" << overload->getQualifiedNameAsString() << ")";
             }
 
             o << ")";
