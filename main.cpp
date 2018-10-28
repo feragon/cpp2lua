@@ -9,7 +9,13 @@
 using namespace clang;
 using namespace clang::ast_matchers;
 
+struct DiscoveredNameSpace {
+    bool declared = false;
+    std::map<std::string, DiscoveredNameSpace> children;
+};
+
 std::map<std::string, std::string> discoveredClasses;
+std::map<std::string, DiscoveredNameSpace> discoveredNamespaces;
 
 std::string getClassName(const clang::CXXRecordDecl* c) {
     auto ctx = c->getDeclContext();
@@ -195,10 +201,17 @@ class ClassParser : public MatchFinder::MatchCallback {
                 std::ostringstream oss;
 
                 std::string luaClassName = className;
+                std::string::size_type oldN = 0;
                 std::string::size_type n = 0;
+                std::map<std::string, DiscoveredNameSpace>* namespaces = &discoveredNamespaces;
+
                 while (( n = luaClassName.find("::", n )) != std::string::npos) {
-                    luaClassName.replace(n, 2, ".");
-                    n += 1;
+                    luaClassName.replace(n, 2, "\"][\"");
+
+                    namespaces = &((*namespaces)[luaClassName.substr(oldN, n - oldN)].children);
+
+                    n += 4;
+                    oldN = n;
                 }
 
                 if(fs->isTemplated()) {
@@ -250,6 +263,18 @@ class ClassParser : public MatchFinder::MatchCallback {
         }
 };
 
+void printDiscoveredNamespaces(const std::map<std::string, DiscoveredNameSpace>& namespaces, std::string base = "") {
+    for(auto pair : namespaces) {
+        auto newBase = base + "[\"" + pair.first + "\"]";
+        std::cout << "    state" << newBase << " = kaguya::NewTable();" << std::endl;
+
+        printDiscoveredNamespaces(pair.second.children, newBase);
+        if(pair.second.children.size() > 0) {
+            std::cout << std::endl;
+        }
+    }
+}
+
 int main(int argc, const char** argv) {
     llvm::cl::OptionCategory category("cpp2lua");
     clang::tooling::CommonOptionsParser op(argc, argv, category);
@@ -261,6 +286,8 @@ int main(int argc, const char** argv) {
     finder.addMatcher(cxxRecordDecl(isClass()).bind("lcClasses"), &parser);
 
     tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+
+    printDiscoveredNamespaces(discoveredNamespaces);
 
     for(auto pair : discoveredClasses) {
         std::cout << pair.second << std::endl;
