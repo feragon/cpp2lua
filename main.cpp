@@ -10,11 +10,11 @@ using namespace clang;
 using namespace clang::ast_matchers;
 
 struct DiscoveredNameSpace {
-    bool declared = false;
     std::map<std::string, DiscoveredNameSpace> children;
 };
 
-std::map<std::string, std::string> discoveredClasses;
+std::set<std::string> discoveredClasses;
+std::vector<std::string> classes;
 std::map<std::string, DiscoveredNameSpace> discoveredNamespaces;
 
 std::string getClassName(const clang::CXXRecordDecl* c) {
@@ -177,88 +177,96 @@ void printMethods(const clang::CXXRecordDecl* c, std::ostream& o) {
     }
 }
 
+void parseClass(const clang::CXXRecordDecl* fs) {
+    if(!fs->isCompleteDefinition()) {
+        return;
+    }
+
+    if(fs->isEmpty()) {
+        return;
+    }
+
+    const std::string className = getClassName(fs);
+
+    if(className.find("lc::") == -1) {
+        return;
+    }
+
+    if(discoveredClasses.count(className) > 0) {
+        return;
+    }
+    std::ostringstream oss;
+
+    std::string luaClassName = className;
+    std::string::size_type oldN = 0;
+    std::string::size_type n = 0;
+    std::map<std::string, DiscoveredNameSpace>* namespaces = &discoveredNamespaces;
+
+    while (( n = luaClassName.find("::", n )) != std::string::npos) {
+        luaClassName.replace(n, 2, "\"][\"");
+
+        namespaces = &((*namespaces)[luaClassName.substr(oldN, n - oldN)].children);
+
+        n += 4;
+        oldN = n;
+    }
+
+    if(fs->isTemplated()) {
+        oss << "//TODO: templated" << std::endl;
+    }
+
+    oss << "state[\"" << luaClassName << "\"].setClass(kaguya::UserdataMetatable<";
+
+    std::vector<clang::CXXRecordDecl*> bases;
+
+    for(auto base : fs->bases()) {
+        auto cxxRecordBase = base.getType()->getAsCXXRecordDecl();
+        if(cxxRecordBase && getClassName(cxxRecordBase).substr(0, 5) != "std::") {
+            bases.push_back(cxxRecordBase);
+            if(discoveredClasses.count(getClassName(cxxRecordBase)) == 0) {
+                parseClass(cxxRecordBase);
+            }
+        }
+    }
+
+    switch(bases.size()) {
+        case 0:
+            oss << className;
+            break;
+
+        case 1:
+            oss << className << ", " << getClassName(*(bases.begin()));
+            break;
+
+        default:
+            oss << className << ", kaguya::MultipleBase<";
+
+            auto it = bases.begin();
+            oss << getClassName(*it);
+            it++;
+
+            while(it != bases.end()) {
+                oss << ", " << getClassName(*it);
+                it++;
+            }
+            oss << ">";
+            break;
+    }
+    oss << ">()" << std::endl;
+
+    printMethods(fs, oss);
+
+    oss << ");" << std::endl;
+
+    classes.push_back(oss.str());
+    discoveredClasses.insert(className);
+}
+
 class ClassParser : public MatchFinder::MatchCallback {
     public :
         void run(const MatchFinder::MatchResult& result) override {
             if (auto* fs = result.Nodes.getNodeAs<clang::CXXRecordDecl>("lcClasses")) {
-                if(!fs->isCompleteDefinition()) {
-                    return;
-                }
-
-                if(fs->isEmpty()) {
-                    return;
-                }
-
-                const std::string className = getClassName(fs);
-
-                if(className.find("lc::") == -1) {
-                    return;
-                }
-
-                if(discoveredClasses.count(className) > 0) {
-                    return;
-                }
-                std::ostringstream oss;
-
-                std::string luaClassName = className;
-                std::string::size_type oldN = 0;
-                std::string::size_type n = 0;
-                std::map<std::string, DiscoveredNameSpace>* namespaces = &discoveredNamespaces;
-
-                while (( n = luaClassName.find("::", n )) != std::string::npos) {
-                    luaClassName.replace(n, 2, "\"][\"");
-
-                    namespaces = &((*namespaces)[luaClassName.substr(oldN, n - oldN)].children);
-
-                    n += 4;
-                    oldN = n;
-                }
-
-                if(fs->isTemplated()) {
-                    oss << "//TODO: templated" << std::endl;
-                }
-
-                oss << "state[\"" << luaClassName << "\"].setClass(kaguya::UserdataMetatable<";
-
-                std::vector<clang::CXXRecordDecl*> bases;
-
-                for(auto base : fs->bases()) {
-                    auto cxxRecordBase = base.getType()->getAsCXXRecordDecl();
-                    if(cxxRecordBase && getClassName(cxxRecordBase).substr(0, 5) != "std::") {
-                        bases.push_back(cxxRecordBase);
-                    }
-                }
-
-                switch(bases.size()) {
-                    case 0:
-                        oss << className;
-                        break;
-
-                    case 1:
-                        oss << className << ", " << getClassName(*(bases.begin()));
-                        break;
-
-                    default:
-                        oss << className << ", kaguya::MultipleBase<";
-
-                        auto it = bases.begin();
-                        oss << getClassName(*it);
-                        it++;
-
-                        while(it != bases.end()) {
-                            oss << ", " << getClassName(*it);
-                            it++;
-                        }
-                        oss << ">";
-                        break;
-                }
-                oss << ">()" << std::endl;
-
-                printMethods(fs, oss);
-
-                oss << ");" << std::endl;
-
-                discoveredClasses[className] = oss.str();
+                parseClass(fs);
             }
         }
 };
@@ -289,8 +297,8 @@ int main(int argc, const char** argv) {
 
     printDiscoveredNamespaces(discoveredNamespaces);
 
-    for(auto pair : discoveredClasses) {
-        std::cout << pair.second << std::endl;
+    for(auto c : classes) {
+        std::cout << c << std::endl;
     }
 
     return 0;
